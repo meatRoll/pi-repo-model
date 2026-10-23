@@ -1,88 +1,54 @@
 {
-  "name": "pi-extensions",
-  "version": "0.1.0",
-  "private": true,
-  "description": "A collection of extensions for the pi coding agent: per-repository defaults, skill toggles, commits, token speed, and more.",
+  "name": "@tian.zuo/pi-repo-model",
+  "version": "0.1.1",
+  "description": "Per-repository default model and thinking level for the pi coding agent.",
   "type": "module",
-  "packageManager": "pnpm@11.21.0",
   "keywords": [
     "pi",
     "pi-package",
     "pi-extension",
     "pi-coding-agent",
-    "coding-agent"
+    "model"
   ],
   "author": "Tian Zuo",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/TianZuo555/pi-extensions.git"
+    "url": "git+https://github.com/meatRoll/pi-repo-model.git"
   },
-  "homepage": "https://github.com/TianZuo555/pi-extensions#readme",
+  "homepage": "https://github.com/meatRoll/pi-repo-model",
   "bugs": {
-    "url": "https://github.com/TianZuo555/pi-extensions/issues"
+    "url": "https://github.com/meatRoll/pi-repo-model/issues"
   },
+  "files": [
+    "index.ts",
+    "lib",
+    "src",
+    "CHANGELOG.md"
+  ],
   "pi": {
     "extensions": [
-      "extensions/pi-repo-model.ts",
-      "extensions/pi-repo-skills.ts",
-      "extensions/commit.ts",
-      "extensions/image-cache.ts",
-      "extensions/token-speed.ts",
-      "extensions/ask-user.ts",
-      "extensions/usage.ts",
-      "extensions/background-terminals.ts",
-      "extensions/compact-output.ts",
-      "extensions/vscode-bridge.ts",
-      "extensions/web-search.ts",
-      "extensions/find.ts",
-      "extensions/compact.ts"
+      "./index.ts"
     ]
   },
   "scripts": {
-    "postinstall": "lefthook install --force",
-    "typecheck": "tsc --noEmit",
-    "typecheck:tsrs": "node --experimental-strip-types scripts/typecheck-tsrs.ts",
-    "typecheck:all": "pnpm run typecheck && pnpm run typecheck:tsrs",
-    "check": "pnpm -r run check",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format": "biome format --write .",
-    "test": "pnpm -r test",
-    "test:ask-user": "pnpm --filter @tian.zuo/pi-ask-user test",
-    "test:commit": "pnpm --filter @tian.zuo/pi-commit test",
-    "test:repo-model": "pnpm --filter @tian.zuo/pi-repo-model test",
-    "test:repo-skills": "pnpm --filter @tian.zuo/pi-repo-skills test",
-    "test:token-speed": "pnpm --filter @tian.zuo/pi-token-speed test",
-    "test:compact-output": "pnpm --filter @tian.zuo/pi-compact-output test",
-    "test:image-cache": "pnpm --filter @tian.zuo/pi-image-cache test",
-    "test:background-terminals": "pnpm --filter @tian.zuo/pi-background-terminals test",
-    "test:vscode-bridge": "pnpm --filter @tian.zuo/pi-vscode-bridge test",
-    "test:web-search": "pnpm --filter @tian.zuo/pi-web-search test",
-    "test:find": "pnpm --filter @tian.zuo/pi-find test",
-    "changeset": "changeset",
-    "changeset:status": "changeset status",
-    "version-packages": "changeset version",
-    "release": "changeset publish",
-    "pack:check": "pnpm -r pack --dry-run"
+    "check": "tsc --noEmit -p .",
+    "test": "node --test --experimental-strip-types test/*.test.ts"
+  },
+  "dependencies": {
+    "effect": "4.0.0-rc.117"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
-    "typebox": "*"
+    "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.15",
-    "@changesets/changelog-github": "^1.0.1",
-    "@changesets/cli": "^3.0.3",
-    "@earendil-works/pi-ai": "^1.4.0",
-    "@earendil-works/pi-coding-agent": "^1.4.0",
-    "@earendil-works/pi-tui": "^1.4.0",
+    "@effect/language-service": "^0.87.4",
     "@types/node": "^26.6.5",
-    "lefthook": "^2.2.2",
-    "tsrs": "0.18.0-ts7.1.0-dev.20260929",
-    "typebox": "^1.4.2",
     "typescript": "^7.0.2"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

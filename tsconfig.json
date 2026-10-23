@@ -12,6 +12,5 @@
     "types": ["node"],
     "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": ["extensions/**/*.ts", "packages/**/*.ts", "scripts/**/*.ts"],
-  "exclude": ["packages/pi-vscode-bridge/vscode/**"]
+  "include": ["index.ts", "lib/**/*.ts", "src/**/*.ts", "test/**/*.ts"]
 }

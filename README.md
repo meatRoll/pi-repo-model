@@ -1,120 +1,47 @@
-# pi-tian-extensions
+# @tian.zuo/pi-repo-model
 
-A collection of independent extensions for the [pi coding agent](https://pi.dev),
-published as npm packages from a pnpm workspace monorepo.
+Standalone fork of `pi-repo-model`, based on the version currently used in the local Pi setup.
 
-Each extension has its own package and its own README under
-[`packages/`](packages/) — this file is only an index.
-
-## Extensions
-
-| Package | Commands / Tools | What it does |
-|---|---|---|
-| [pi-repo-model](packages/pi-repo-model/README.md) | `/repo-model`, `/repo-model-unset`, `/repo-model-list` | Per-repo default model + thinking level, auto-applied at session start. |
-| [pi-repo-skills](packages/pi-repo-skills/README.md) | `/skills`, `/skills-list`, `/skills-reset` | Per-repo skill toggles via checkbox TUI; disabled skills leave the prompt. |
-| [pi-commit](packages/pi-commit/README.md) | `/commit`, `/commit-all` | Git commits written by a separately configured model. |
-| [pi-token-speed](packages/pi-token-speed/README.md) | `/tps` | Live tok/s meter in the footer plus an end-of-message summary. |
-| [pi-image-cache](packages/pi-image-cache/README.md) | `Ctrl+V`, `/images`, `/image-cache-clear` | Caches pasted images as `[Image#NNN]` and re-attaches them on send. |
-| [pi-ask-user](packages/pi-ask-user/README.md) | tool `ask_user` | Lets the model ask 1–5 single-choice questions in one form. |
-| [pi-usage](packages/pi-usage/README.md) | `/usage`, `/tokens` | Provider account usage (OpenAI via legacy Codex login, Copilot, Z.ai, DeepSeek, Xiaomi MiMo) plus a token/cost dashboard. |
-| [pi-background-terminals](packages/pi-background-terminals/README.md) | `/ps`, overrides tool `bash` | One no-stdin bash path: long commands yield to background and notify once. |
-| [pi-edit-safe (deprecated)](packages/pi-edit-safe/README.md) | overrides tool `edit` | Historical stricter edit override; use Pi’s built-in `edit` tool. |
-| [pi-find](packages/pi-find/README.md) | overrides tools `grep`/`find` | Simple, bounded regex and file-glob search. |
-| [pi-subagents (deprecated)](packages/pi-subagents/README.md) | tool `subagent`, `/agents` | Historical isolated subagent runs; no longer recommended or actively developed. |
-| [pi-compact-output](packages/pi-compact-output/README.md) | (TUI only) | Compact tool status blocks; Ctrl+O restores full output. |
-| [pi-goal (deprecated)](packages/pi-goal/README.md) | `/goal`, tools `get_goal`/`update_goal` | Historical goal-mode loop; no longer recommended or actively developed. |
-| [pi-todo (deprecated)](packages/pi-todo/README.md) | tool `todo` | Historical session-local checklist; prefer model-managed plans for simple work. |
-| [pi-web-search](packages/pi-web-search/README.md) | tools `web_search`/`web_fetch`, `/websearch-order` | Web search and fetch with tabbed fallback-order configuration across ten providers plus direct fetch. |
-| [pi-antigravity](packages/pi-antigravity/README.md) | `/agy`, `/agy-tasks`, `/agy-artifacts`, `/agy-usage` | Google Antigravity (`agy`) models inside pi via stream-json RPC. |
-| [pi-vscode-bridge](packages/pi-vscode-bridge/README.md) | `/vscode-connect` | Send file/line/diff-hunk refs from VS Code into pi's editor. |
-| [pi-compact](packages/pi-compact/README.md) | intercepts `/compact` | GPT-6 Luna compaction: opaque Codex checkpoints or text summaries for new OpenAI OAuth. |
-| [pi-devin-acp](packages/pi-devin-acp/README.md) | models `devin/*`, `/devin`, `/devin-<sub>` | Devin models inside pi by driving the Devin CLI as an ACP server. |
+Per-repository default model and thinking-level preferences for the [pi coding agent](https://pi.dev).
 
 ## Install
 
-The extensions are published as independent npm packages — install only the
-ones you need:
+Install this fork directly from GitHub:
 
 ```bash
-pi install npm:@tian.zuo/pi-commit
-pi install npm:@tian.zuo/pi-background-terminals
+pi install git:github.com/meatRoll/pi-repo-model
 ```
 
-Restart pi or run `/reload` after installation. Try an extension temporarily
-without adding it to settings:
+For a local checkout:
 
 ```bash
-pi -e npm:@tian.zuo/pi-image-cache
+pi install ./pi-repo-model
 ```
 
-Update installed extensions and reload:
+## How it works
 
-```bash
-pi update --extensions
-```
+Stores one model preference per repository in `~/.pi/repo-model/config.json`
+and applies it at session start (default triggers: fresh start + new session).
+An explicit `pi --model ...` takes precedence on startup. Selections are keyed
+by git root, so each repository keeps its own preference without touching global
+settings or the repo's own `.pi/` folder.
 
-Remove one independently:
+## Commands
 
-```bash
-pi remove npm:@tian.zuo/pi-token-speed
-```
+- `/repo-model` — pick a model, then a thinking level, from dropdowns.
+- `/repo-model provider/model[:thinking]` — set directly, for example:
+  `/repo-model cursor/composer-2.5:high`.
+- `/repo-model-unset` — clear the current repo's default.
+- `/repo-model-list` — list every configured repo.
 
 ## Development
 
-The repository is a pnpm workspace with one package per extension under
-`packages/`.
-
 ```bash
 pnpm install
-pnpm run typecheck   # TypeScript across all workspaces
-pnpm run check       # Effect checks
-pnpm test            # extension test suites (deprecated packages excluded)
-```
-
-The deprecated `pi-todo`, `pi-subagents`, `pi-edit-safe`, and `pi-goal`
-packages declare no `test` script, so both local recursive runs and CI
-(full-suite and changed-package runs) skip their archived tests. These
-deprecated packages are not loaded by the root package.
-
-Try a single extension from a checkout:
-
-```bash
-pi -e ./packages/pi-repo-model
-```
-
-Extensions import pi's runtime packages (`@earendil-works/*`, `typebox`) as
-**peer dependencies** — pi provides them at runtime; they are never bundled.
-
-## Publishing
-
-Releases use [Changesets](https://github.com/changesets/changesets). For every
-publishable extension change, run `pnpm changeset`, select the package and
-semantic version bump, and commit the generated release-note file. Do not bump
-package versions manually.
-
-Two workflows automate quality and delivery. [`CI`](.github/workflows/ci.yml)
-runs on every pull request and push to `main`: typecheck, Effect checks, lint,
-and a packing dry run on Ubuntu, plus the full test suite on Ubuntu, Windows,
-and macOS. Make its `CI` summary job a required status check on `main`.
-
-On pushes to `main`, [`Release`](.github/workflows/release.yml) reuses that same
-CI workflow as a gate and then opens or updates a release PR. Merging that PR
-publishes each changed package to npm, updates its package-specific
-`CHANGELOG.md`, and creates a separate tagged GitHub release. npm trusted
-publishing supplies OIDC provenance without a token secret. The workflow can
-also be run manually from *Actions → Release* in dry-run mode to preview pending
-releases. The repository must allow GitHub Actions to create pull requests under
-*Settings → Actions → General → Workflow permissions*.
-
-The release PR is created with the default `GITHUB_TOKEN`, so it never triggers
-`pull_request` CI — that is why `Release` runs the checks itself instead of
-relying on the PR's status.
-
-```bash
-pnpm changeset          # add release notes for changed packages
-pnpm changeset:status   # inspect pending releases
+pnpm run check
+pnpm test
 ```
 
 ## License
 
-[MIT](./LICENSE) © Tian Zuo
+[MIT](LICENSE) © Tian Zuo
