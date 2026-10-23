@@ -28,7 +28,7 @@ settings or the repo's own `.pi/` folder.
 
 ## Commands
 
-- `/repo-model` — pick a model, then a thinking level, from dropdowns.
+- `/repo-model` — start typing to fuzzy-filter models (like `/model`), then pick a thinking level.
 - `/repo-model provider/model[:thinking]` — set directly, for example:
   `/repo-model cursor/composer-2.5:high`.
 - `/repo-model-unset` — clear the current repo's default.

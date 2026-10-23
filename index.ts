@@ -15,7 +15,7 @@ import {
   resolveModelScopeWithDiagnostics,
   type ScopedModel,
 } from "@earendil-works/pi-coding-agent";
-import { Container, Spacer, Text } from "@earendil-works/pi-tui";
+import { Container, fuzzyFilter, Input, Spacer, Text } from "@earendil-works/pi-tui";
 import type { RepoMeta } from "./lib/repo-registry.ts";
 import {
   createRepoModelRuntime,
@@ -55,6 +55,7 @@ interface ScopedModelOption {
   label: string; // friendly text shown in the dropdown
   provider: string;
   id: string;
+  name: string;
   model: unknown;
   patternThinking?: ThinkingLevel; // thinking level hinted by the enabledModels pattern
 }
@@ -102,11 +103,18 @@ async function getScopedModelOptions(ctx: ExtensionContext): Promise<ScopedModel
       label,
       provider: m.provider as string,
       id: m.id as string,
+      name,
       model: m,
       patternThinking: s.thinkingLevel as ThinkingLevel | undefined,
     });
   }
   return [...seen.values()];
+}
+
+/** Same search text pi's /model selector uses, so ranking matches the built-in picker. */
+function modelSearchText(option: ScopedModelOption): string {
+  const name = option.name && option.name !== option.id ? ` ${option.name}` : "";
+  return `${option.provider} ${option.provider}/${option.id} ${option.provider} ${option.id}${name}`;
 }
 
 function thinkingLevelsForModel(model: unknown): ThinkingLevel[] {
@@ -240,123 +248,218 @@ class RepoModelPicker extends Container {
   private readonly done: (result: PickerResult | undefined) => void;
 
   private stage: "model" | "thinking" = "model";
+  private filteredOptions: ScopedModelOption[];
   private modelIndex: number;
   private picked: ScopedModelOption | undefined;
   private thinkingOptions: string[] = [];
   private thinkingValues: (ThinkingLevel | undefined)[] = [];
   private thinkingIndex = 0;
 
+  private readonly headerText: Text;
+  private readonly listText: Text;
+  private readonly searchInput: Input;
+  private _focused = false;
+
   constructor(args: PickerArgs) {
     super();
     this.repoName = args.repoName;
     this.modelOptions = args.modelOptions;
+    this.filteredOptions = [...args.modelOptions];
     this.modelIndex = Math.max(0, Math.min(args.defaultModelIndex, args.modelOptions.length - 1));
     this.theme = args.theme;
     this.keybindings = args.keybindings;
     this.done = args.done;
+
+    this.headerText = new Text("", 0, 0);
+    this.listText = new Text("", 0, 0);
+    this.searchInput = new Input({
+      prompt: this.theme.fg("muted", "> "),
+      placeholder: "type to filter models (provider, id, or name)",
+      placeholderStyle: (text) => this.theme.fg("muted", text),
+    });
+    this.searchInput.onSubmit = () => this.selectModel();
+    this.searchInput.onEscape = () => this.done(undefined);
+
+    this.applyFilter();
+    this.rebuildUI();
+  }
+
+  /** Focusable: forward focus to the search input while filtering models. */
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+    this.searchInput.focused = value && this.stage === "model";
+  }
+
+  private applyFilter(): void {
+    const query = this.searchInput.getValue().trim();
+    if (!query) {
+      const selectedKey = this.filteredOptions[this.modelIndex]?.key;
+      this.filteredOptions = [...this.modelOptions];
+      const restored = selectedKey
+        ? this.filteredOptions.findIndex((option) => option.key === selectedKey)
+        : -1;
+      this.modelIndex =
+        restored !== -1
+          ? restored
+          : Math.max(0, Math.min(this.modelIndex, this.filteredOptions.length - 1));
+      return;
+    }
+
+    this.filteredOptions = fuzzyFilter(this.modelOptions, query, modelSearchText);
+    // Like /model, highlight the best match for the query.
+    this.modelIndex = 0;
+  }
+
+  private selectModel(): void {
+    const picked = this.filteredOptions[this.modelIndex];
+    if (!picked) return;
+
+    this.picked = picked;
+
+    const supported = thinkingLevelsForModel(picked.model);
+    this.thinkingOptions = [NO_OVERRIDE, ...supported];
+    this.thinkingValues = [undefined, ...supported];
+    this.thinkingIndex = 0;
+
+    if (picked.patternThinking && supported.includes(picked.patternThinking)) {
+      const matchIdx = this.thinkingValues.indexOf(picked.patternThinking);
+      if (matchIdx !== -1) this.thinkingIndex = matchIdx;
+    }
+
+    this.stage = "thinking";
+    this.searchInput.focused = false;
     this.rebuildUI();
   }
 
   private rebuildUI(): void {
-    const lines: string[] = [];
     const t = this.theme;
+    const header = [t.bold(t.fg("accent", `repo-model · ${this.repoName}`))];
 
     if (this.stage === "model") {
-      lines.push(t.bold(t.fg("accent", `repo-model · ${this.repoName}`)));
-      lines.push(t.fg("muted", "Step 1 of 2: pick the default model (Enter next · Esc cancel)"));
-      lines.push("");
+      header.push(t.fg("muted", "Step 1 of 2: filter and pick the default model"));
+      this.headerText.setText(header.join("\n"));
 
-      const visibleRows = 10;
-      const start = Math.max(
-        0,
-        Math.min(
-          this.modelIndex - Math.floor(visibleRows / 2),
-          this.modelOptions.length - visibleRows,
-        ),
-      );
-      const end = Math.min(start + visibleRows, this.modelOptions.length);
+      const total = this.modelOptions.length;
+      const shown = this.filteredOptions.length;
+      const lines: string[] = [];
 
-      for (let i = start; i < end; i++) {
-        const opt = this.modelOptions[i];
-        const selected = i === this.modelIndex;
-        const prefix = selected ? t.fg("accent", "❯ ") : "  ";
-        const text = selected ? t.bold(opt.label) : opt.label;
-        lines.push(`${prefix}${text}`);
+      if (shown === 0) {
+        lines.push(t.fg("muted", "  No matching models"));
+      } else {
+        const visibleRows = 10;
+        const start = Math.max(
+          0,
+          Math.min(this.modelIndex - Math.floor(visibleRows / 2), shown - visibleRows),
+        );
+        const end = Math.min(start + visibleRows, shown);
+
+        for (let i = start; i < end; i++) {
+          const opt = this.filteredOptions[i];
+          if (!opt) continue;
+          const selected = i === this.modelIndex;
+          const prefix = selected ? t.fg("accent", "❯ ") : "  ";
+          const text = selected ? t.bold(opt.label) : opt.label;
+          lines.push(`${prefix}${text}`);
+        }
+
+        if (start > 0 || end < shown) {
+          lines.push(t.fg("muted", `  (${this.modelIndex + 1}/${shown})`));
+        }
       }
-    } else {
-      lines.push(t.bold(t.fg("accent", `repo-model · ${this.repoName}`)));
-      lines.push(
-        t.fg(
-          "muted",
-          `Step 2 of 2: thinking level for ${this.picked?.label ?? ""} (Enter save · Esc cancel)`,
-        ),
-      );
-      lines.push("");
 
-      for (let i = 0; i < this.thinkingOptions.length; i++) {
-        const selected = i === this.thinkingIndex;
-        const prefix = selected ? t.fg("accent", "❯ ") : "  ";
-        const option = this.thinkingOptions[i];
-        const text = selected ? t.bold(option) : option;
-        lines.push(`${prefix}${text}`);
+      if (this.searchInput.getValue().trim()) {
+        lines.push("");
+        lines.push(t.fg("muted", `  ${shown}/${total} models match`));
       }
+      lines.push("");
+      lines.push(t.fg("muted", "↑↓ move · Enter next · Esc cancel · type to filter"));
+
+      this.listText.setText(lines.join("\n"));
+      this.children = [this.headerText, this.searchInput, this.listText, new Spacer(1)];
+      return;
     }
 
-    this.children = [new Text(lines.join("\n"), 0, 0), new Spacer(1)];
+    header.push(
+      t.fg(
+        "muted",
+        `Step 2 of 2: thinking level for ${this.picked?.label ?? ""} (Enter save · Esc cancel)`,
+      ),
+    );
+    this.headerText.setText(header.join("\n"));
+
+    const lines: string[] = [];
+    for (let i = 0; i < this.thinkingOptions.length; i++) {
+      const selected = i === this.thinkingIndex;
+      const prefix = selected ? t.fg("accent", "❯ ") : "  ";
+      const option = this.thinkingOptions[i];
+      const text = selected ? t.bold(option) : option;
+      lines.push(`${prefix}${text}`);
+    }
+
+    this.listText.setText(lines.join("\n"));
+    this.children = [this.headerText, this.listText, new Spacer(1)];
   }
 
   handleInput(data: string): boolean {
-    if (this.keybindings.matches(data, "cancel") || data === "\x1b") {
+    if (this.keybindings.matches(data, "tui.select.cancel") || data === "\x1b") {
       this.done(undefined);
       return true;
     }
 
     if (this.stage === "model") {
-      if (this.keybindings.matches(data, "up") || data === "\x1b[A") {
-        this.modelIndex =
-          (this.modelIndex - 1 + this.modelOptions.length) % this.modelOptions.length;
-        this.rebuildUI();
-        return true;
-      }
-      if (this.keybindings.matches(data, "down") || data === "\x1b[B") {
-        this.modelIndex = (this.modelIndex + 1) % this.modelOptions.length;
-        this.rebuildUI();
-        return true;
-      }
-      if (this.keybindings.matches(data, "select") || data === "\r" || data === "\n") {
-        this.picked = this.modelOptions[this.modelIndex];
-        if (!this.picked) return true;
+      const count = this.filteredOptions.length;
 
-        const supported = thinkingLevelsForModel(this.picked.model);
-        this.thinkingOptions = [NO_OVERRIDE, ...supported];
-        this.thinkingValues = [undefined, ...supported];
-        this.thinkingIndex = 0;
-
-        if (this.picked.patternThinking && supported.includes(this.picked.patternThinking)) {
-          const matchIdx = this.thinkingValues.indexOf(this.picked.patternThinking);
-          if (matchIdx !== -1) this.thinkingIndex = matchIdx;
+      if (this.keybindings.matches(data, "tui.select.up") || data === "\x1b[A") {
+        if (count > 0) {
+          this.modelIndex = (this.modelIndex - 1 + count) % count;
+          this.rebuildUI();
         }
-
-        this.stage = "thinking";
-        this.rebuildUI();
         return true;
       }
-      return false;
+      if (this.keybindings.matches(data, "tui.select.down") || data === "\x1b[B") {
+        if (count > 0) {
+          this.modelIndex = (this.modelIndex + 1) % count;
+          this.rebuildUI();
+        }
+        return true;
+      }
+      if (
+        this.keybindings.matches(data, "tui.select.confirm") ||
+        data === "\r" ||
+        data === "\n"
+      ) {
+        this.selectModel();
+        return true;
+      }
+
+      // Everything else is typed into the search box.
+      this.searchInput.handleInput(data);
+      this.applyFilter();
+      this.rebuildUI();
+      return true;
     }
 
     // stage === "thinking"
-    if (this.keybindings.matches(data, "up") || data === "\x1b[A") {
+    if (this.keybindings.matches(data, "tui.select.up") || data === "\x1b[A") {
       this.thinkingIndex =
         (this.thinkingIndex - 1 + this.thinkingOptions.length) % this.thinkingOptions.length;
       this.rebuildUI();
       return true;
     }
-    if (this.keybindings.matches(data, "down") || data === "\x1b[B") {
+    if (this.keybindings.matches(data, "tui.select.down") || data === "\x1b[B") {
       this.thinkingIndex = (this.thinkingIndex + 1) % this.thinkingOptions.length;
       this.rebuildUI();
       return true;
     }
-    if (this.keybindings.matches(data, "select") || data === "\r" || data === "\n") {
+    if (
+      this.keybindings.matches(data, "tui.select.confirm") ||
+      data === "\r" ||
+      data === "\n"
+    ) {
       if (!this.picked) {
         this.done(undefined);
         return true;
@@ -570,7 +673,7 @@ export default function repoModelExtension(pi: ExtensionAPI): void {
 
   pi.registerCommand("repo-model", {
     description:
-      "Pick the repo default model + thinking level (dropdowns), or set via provider/model[:thinking]",
+      "Pick the repo default model + thinking level (fuzzy-searchable models), or set via provider/model[:thinking]",
     handler: async (args, ctx) => {
       const trimmed = args.trim();
       if (trimmed) {

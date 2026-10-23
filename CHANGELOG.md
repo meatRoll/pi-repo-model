@@ -1,5 +1,11 @@
 # @tian.zuo/pi-repo-model
 
+## Unreleased
+
+### Minor Changes
+
+- `/repo-model` model picker now supports fuzzy search (provider, model id, or name), matching the `/model` selector experience, with `↑`/`↓` navigation and Enter/Esc controls.
+
 ## 0.1.1
 
 ### Patch Changes
